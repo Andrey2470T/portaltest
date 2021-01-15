@@ -1,10 +1,8 @@
+-- WHITE PANELS FROM MOON ROCK -- 
+
 minetest.register_node("portaltest:panel_mono", {
     description = "Mono Panel",
-    drawtype = "normal",
-    tiles = {"portaltest_while_panel.png"},
-    paramtype = "light",
-    paramtype2 = "facedir",
-    sunlight_propagates = true,
-    groups = {cracky=1.5},
+    tiles = {"portaltest_white_panel.png"},
+    groups = {cracky=1.5, moonpanel = 1},
     sounds = default.node_sound_stone_defaults()
 }) 
