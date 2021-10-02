@@ -1,5 +1,6 @@
 local modpath = minetest.get_modpath("portaltest")
 
+dofile(modpath .. "/aerial_faith_plate.lua")
 dofile(modpath .. "/config.lua")
 dofile(modpath .. "/gun.lua")
 dofile(modpath .. "/panels.lua")

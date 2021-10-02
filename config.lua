@@ -11,7 +11,7 @@ gsettings.SPLASH_STREAM_SPEED = 50
 gsettings.SPLASH_DROP_LIFETIME = 2
 
 -- splash stream collision box
-gsettings.SPLASH_STREAM_COLLISION_BOX = {-0.1, -0.1, -0.1, 0.1, 0.1, 0.1}
+gsettings.SPLASH_STREAM_COLLISION_BOX = {-0.01, -0.01, -0.01, 0.01, 0.01, 0.01}
 
 -- splash drop collision box
-gsettings.SPLASH_DROP_COLLISION_BOX = {-0.05, -0.05, -0.05, 0.05, 0.05, 0.05}
+gsettings.SPLASH_DROP_COLLISION_BOX = {-0.005, -0.005, -0.005, 0.005, 0.005, 0.005}
