@@ -1,21 +1,26 @@
-minetest.register_node("portaltest:aerial_faith_plate", {
+minetest.register_node("portaltest:aerial_faith_plate_idle", {
 	description = "Aerial Faith Plate (Click to set up parameters of bouncing)",
-	drawtype = "nodebox",
-	tiles = {
-		"portaltest_aerial_faith_plate_top.png",
-		"portaltest_aerial_faith_plate_bottom.png",
-		"portaltest_aerial_faith_plate_side.png"
-	},
-	use_texture_alpha = true,
+	drawtype = "mesh",
+	mesh = "portaltest_aerial_faith_plate_idle.b3d",
+	tiles = {"portaltest_aerial_faith_plate.png"},
+	use_texture_alpha = "blend",
 	paramtype = "light",
 	paramtype2 = "facedir",
-	node_box = {
+	collision_box = {
 		type = "fixed",
-		fixed = {-0.5, -0.5, -0.5, 0.5, -0.41, 0.5}
+		fixed = {
+			--{-0.85, -1.5, -0.85, 0.85, -0.5, 0.85},
+			{-1.5, -0.5, -1.5, 1.5, -0.3, 1.5},
+			{-0.85, -0.3, -0.85, 0.85, -0.2, 0.85}
+		}
 	},
 	selection_box = {
 		type = "fixed",
-		fixed = {-0.5, -0.5, -0.5, 0.5, -0.41, 0.5}
+		fixed = {
+			--{-0.85, -1.5, -0.85, 0.85, -0.5, 0.85},
+			{-1.5, -0.5, -1.5, 1.5, -0.3, 1.5},
+			{-0.85, -0.3, -0.85, 0.85, -0.2, 0.85}
+		}
 	},
 	groups = {choppy=2.5},
 	sounds = default.node_sound_wood_defaults(),
@@ -38,4 +43,4 @@ minetest.register_node("portaltest:aerial_faith_plate", {
 			button[3,5.5;3,1;save;Save]
 		]])
 	end
-}) 
+})
