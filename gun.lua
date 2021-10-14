@@ -5,8 +5,6 @@ gun = {}
 -- Table for referencing to a gun entity of each player that is wielding that currently
 gun.spawned_guns = {}
 
-local gun_shift = {x=0.3, y=1.2, z=0.5}
-
 gun.generate_splash_particles = function(pos, normal, splash_color)
     local rand_amount = math.random(20, 25)
 
@@ -20,8 +18,8 @@ gun.generate_splash_particles = function(pos, normal, splash_color)
 		maxpos = pos,
 		minvel = vector.multiply(min_vel_dir, 5),
 		maxvel = vector.multiply(max_vel_dir, 5),
-		minacc = {x=0, y=-gsettings.SPLASH_STREAM_GRAVITY, z=0},
-		maxacc = {x=0, y=-gsettings.SPLASH_STREAM_GRAVITY, z=0},
+		minacc = {x=0, y=-gsettings.SPLASH_DROP_GRAVITY, z=0},
+		maxacc = {x=0, y=-gsettings.SPLASH_DROP_GRAVITY, z=0},
 		minexptime = 1.5,
 		maxexptime = 2.5,
 		minsize = 3,
@@ -38,19 +36,19 @@ end
 gun.calculate_gun_pos_and_rot = function(player)
 	local rot = {x=-player:get_look_vertical(), y=player:get_look_horizontal(), z=0}
 
-	local pos = vector.add(player:get_pos(), vector.rotate(gun_shift, {x=0, y=player:get_look_horizontal(), z=0}))
+	local pos = vector.add(player:get_pos(), vector.rotate(gsettings.GUN_POSITION_SHIFT, {x=0, y=player:get_look_horizontal(), z=0}))
 
 	return pos, rot
 end
 
 -- Shifts the gun entity backward and turns right a bit for a visual effect while shooting. Also knockback a bit the player`s camera.
 gun.knockback_gun = function(player, gun)
-	local shift_back = -0.05
-	local rot_right = -math.rad(1)
-	local cam_rot_d = -math.rad(5)
+	local shift_back = -0.1
+	local rot_right = -math.rad(2)
+	local cam_rot_d = -math.rad(2)
 
 	local elapsed = 0.0
-	local dtime = 0.05
+	local dtime = 0.1
 
 	local orig_cam_dir = player:get_look_dir()
 	minetest.debug("gun.knockback_gun()")
@@ -61,7 +59,8 @@ gun.knockback_gun = function(player, gun)
 			return
 		end
 
-		if elapsed >= 0.5 and elapsed < 0.55 or elapsed > 0.45 and elapsed <= 0.5 then
+		if (math.floor(elapsed * 10) / 10) == 0.3 then
+		--if elapsed >= 0.5 and elapsed < 0.55 or elapsed > 0.45 and elapsed <= 0.5 then
 			minetest.debug("elapsed = 0.5")
 			rot_right = -rot_right
 			shift_back = -shift_back
@@ -75,7 +74,7 @@ gun.knockback_gun = function(player, gun)
 		gun:set_rotation({x=cur_rot.x, y=cur_rot.y+rot_right, z=cur_rot.z})
 
 
-		if elapsed < 1.0 then
+		if elapsed < 0.6 then
 			minetest.after(dtime, knockback, gun)
 		else
 			player:get_meta():set_string("is_shooting", "")
@@ -109,9 +108,9 @@ gun.shoot = function(player, gun, ball_color)
 	local dir = player:get_look_dir()
 	local gun_pos = gun:get_pos()
 
-	local gun_ball = minetest.add_entity(gun_pos, "portaltest:gun_ball")
+	local gun_ball = minetest.add_entity(vector.add(gun_pos, vector.multiply(dir, -0.3)), "portaltest:gun_ball")
 	gun_ball:set_properties({textures={"portaltest_gun_ball.png^[multiply:" .. ball_color}})
-	gun_ball:set_velocity(vector.multiply(dir, gsettings.SPLASH_STREAM_SPEED))
+	gun_ball:set_velocity(vector.multiply(dir, gsettings.GUN_BALL_SPEED))
 
 	return true
 end
@@ -167,6 +166,7 @@ gun.global_step_through_players_with_guns = function()
 			player_api.set_animation(player, anim, speed)
 		else
 			if gun.spawned_guns[name] then
+				minetest.debug("remove gun entity")
 				gun.spawned_guns[name]:remove()
 				gun.spawned_guns[name] = nil
 				player_api.set_model(player, "character.b3d")
@@ -411,7 +411,7 @@ minetest.register_entity("portaltest:gun_ball", {
     visual_size = {x=1, y=1, z=1},
     physical = true,
     collide_with_objects = false,
-    collisionbox = gsettings.SPLASH_STREAM_COLLISION_BOX,
+    collisionbox = gsettings.GUN_BALL_COLLISION_BOX,
 	selectionbox = {0, 0, 0, 0, 0, 0},
     textures = {"portaltest_gun_ball.png"},
     backface_culling = false,
