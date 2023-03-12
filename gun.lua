@@ -28,51 +28,41 @@ gun.generate_splash_particles = function(pos, normal, splash_color)
 		collision_removal = false,
 		object_collision = false,
 		texture = "portaltest_splash_drop.png^[multiply:" .. splash_color,
-		glow = 7
+		glow = 14
 	})
-end
-
--- Recalculates a new position and rotation for gun relatively to the player`s rotation.
-gun.calculate_gun_pos_and_rot = function(player)
-	local rot = {x=-player:get_look_vertical(), y=player:get_look_horizontal(), z=0}
-
-	local pos = vector.add(player:get_pos(), vector.rotate(gsettings.GUN_POSITION_SHIFT, {x=0, y=player:get_look_horizontal(), z=0}))
-
-	return pos, rot
 end
 
 -- Shifts the gun entity backward and turns right a bit for a visual effect while shooting. Also knockback a bit the player`s camera.
 gun.knockback_gun = function(player, gun)
-	local shift_back = -0.1
-	local rot_right = -math.rad(2)
+	local shift_back = -0.2
 	local cam_rot_d = -math.rad(2)
 
 	local elapsed = 0.0
 	local dtime = 0.1
 
 	local orig_cam_dir = player:get_look_dir()
-	minetest.debug("gun.knockback_gun()")
+	local shift_count = 0
+
 	local function knockback(gun)
 		elapsed = elapsed + dtime
-		minetest.debug("elapsed: " .. tostring(elapsed))
+
 		if not gun:get_luaentity() then
 			return
 		end
 
-		if (math.floor(elapsed * 10) / 10) == 0.3 then
-		--if elapsed >= 0.5 and elapsed < 0.55 or elapsed > 0.45 and elapsed <= 0.5 then
-			minetest.debug("elapsed = 0.5")
-			rot_right = -rot_right
+		if math.floor(elapsed*10)/10 == 0.4 then
 			shift_back = -shift_back
 			cam_rot_d = -cam_rot_d
+			shift_count = 1
+		else
+			shift_count = shift_count + 1
 		end
 
 		player:set_look_vertical(player:get_look_vertical()+cam_rot_d)
 
-		gun:set_pos(vector.add(gun:get_pos(), vector.multiply(orig_cam_dir, shift_back)))
-		local cur_rot = gun:get_rotation()
-		gun:set_rotation({x=cur_rot.x, y=cur_rot.y+rot_right, z=cur_rot.z})
-
+		local p, b, pos, rot, fv = gun:get_attach()
+		pos.z = pos.z + shift_back * shift_count
+		gun:set_attach(p, b, pos, rot, fv)
 
 		if elapsed < 0.6 then
 			minetest.after(dtime, knockback, gun)
@@ -106,9 +96,9 @@ gun.shoot = function(player, gun, ball_color)
 	end
 
 	local dir = player:get_look_dir()
-	local gun_pos = gun:get_pos()
 
-	local gun_ball = minetest.add_entity(vector.add(gun_pos, vector.multiply(dir, -0.3)), "portaltest:gun_ball")
+	local ball_pos = vector.add(gun:get_pos(), vector.rotate(gsettings.GUN_POSITION_SHIFT, {x=-player:get_look_vertical(), y=player:get_look_horizontal(), z=0}))
+	local gun_ball = minetest.add_entity(vector.add(ball_pos, vector.multiply(dir, -0.3)), "portaltest:gun_ball")
 	gun_ball:set_properties({textures={"portaltest_gun_ball.png^[multiply:" .. ball_color}})
 	gun_ball:set_velocity(vector.multiply(dir, gsettings.GUN_BALL_SPEED))
 
@@ -121,17 +111,11 @@ gun.global_step_through_players_with_guns = function()
     for _, player in ipairs(players) do
 		local name = player:get_player_name()
         if player:get_wielded_item():get_name() == "portaltest:gun_item" then
-			local gun_pos, gun_rot = gun.calculate_gun_pos_and_rot(player)
 			if not gun.spawned_guns[name] then
-				minetest.debug("add gun entity")
-				gun.spawned_guns[name] = minetest.add_entity(gun_pos, "portaltest:gun")
+				gun.spawned_guns[name] = minetest.add_entity(player:get_pos(), "portaltest:gun")
+				gun.spawned_guns[name]:set_attach(player, "", vector.multiply(gsettings.GUN_POSITION_SHIFT, 10), {x=0, y=0, z=0}, true)
 				player_api.set_model(player, "portaltest_player_with_gun.b3d")
-			else
-				gun.spawned_guns[name]:set_pos(gun_pos)
 			end
-
-			gun.spawned_guns[name]:set_rotation(gun_rot)
-
 
 			local ctrls = player:get_player_control()
 
@@ -144,13 +128,11 @@ gun.global_step_through_players_with_guns = function()
 				anim = "walk_backward"
 			elseif ctrls.LMB or ctrls.RMB then
 				if meta:get_string("is_shooting") == "" then
-					minetest.debug("\'is_shooting\' is empty!")
 					anim = "shoot"
 					speed = 10
 
 					local gun_color = ctrls.LMB and "blue" or "orange"
 					meta:set_string("is_shooting", "1")
-					minetest.debug("\'is_shooting\' is 1!")
 
 					gun.spawned_guns[name]:set_properties({textures={"portaltest_gun.png", "portaltest_gun_" .. gun_color .. "_tube.png"}})
 
@@ -166,46 +148,11 @@ gun.global_step_through_players_with_guns = function()
 			player_api.set_animation(player, anim, speed)
 		else
 			if gun.spawned_guns[name] then
-				minetest.debug("remove gun entity")
 				gun.spawned_guns[name]:remove()
 				gun.spawned_guns[name] = nil
 				player_api.set_model(player, "character.b3d")
 			end
 		end
-
-
-		--[[
-            local ctrls = player:get_player_control()
-            local color = ""
-
-            if ctrls.LMB then
-                color = "blue"
-            elseif ctrls.RMB then
-                color = "orange"
-            else
-                return
-            end
-
-            player:set_wielded_item(ItemStack("portaltest:gun_" .. color))
-            local pl_pos = player:get_pos()
-            local rel_offset_pos = vector.new(0.5, 0, 0)
-			rel_offset_pos.y = 0.5
-
-			local dir = player:get_look_dir()
-			local dir_rot = vector.dir_to_rotation(dir)
-            rel_offset_pos = vector.rotate(rel_offset_pos, dir_rot)
-            local pos = vector.add(pl_pos, rel_offset_pos)
-            local splash_stream = minetest.add_entity(pos, "portaltest:splash_stream")
-            splash_stream:set_properties({textures={"portaltest_splash_stream.png^[multiply:" .. color}})
-            splash_stream:set_velocity(vector.multiply(dir, gsettings.SPLASH_STREAM_SPEED))
-
-			local self = splash_stream:get_luaentity()
-			self.stream_emitter = player:get_player_name()
-
-            minetest.after(0.5, function()
-                player:set_wielded_item(ItemStack("portaltest:gun_empty"))
-            end)
-        end]]
     end
 end
 
@@ -327,8 +274,9 @@ minetest.register_entity("portaltest:gun", {
 	pointable = false,
 	visual = "mesh",
 	mesh = "portaltest_gun.b3d",
-	textures = {"portaltest_gun.png"},
-	glow = 4,
+	use_texture_alpha = true,
+	textures = {"portaltest_gun.png", "portaltest_gun_empty_tube.png"},
+	glow = 12,
 	static_save = false
 })
 
@@ -415,7 +363,7 @@ minetest.register_entity("portaltest:gun_ball", {
 	selectionbox = {0, 0, 0, 0, 0, 0},
     textures = {"portaltest_gun_ball.png"},
     backface_culling = false,
-    glow = 7,
+    glow = 25,
     on_activate = function(self, staticdata, dtime_s)
 		self.move_dir = vector.normalize(self.object:get_velocity())
     end,
@@ -425,7 +373,7 @@ minetest.register_entity("portaltest:gun_ball", {
 		else
 			local pos = self.object:get_pos()
 			local vel = self.object:get_velocity()
-			minetest.debug("cur_vel: " .. vector.length(vel))
+			--minetest.debug("cur_vel: " .. vector.length(vel))
 			local texture = self.object:get_properties().textures[1]
 
 			self.object:remove()
@@ -440,7 +388,7 @@ minetest.register_entity("portaltest:gun_ball", {
 			end]]
 
 			if pt then
-				minetest.debug("\'pt\' is not nil!")
+				--minetest.debug("\'pt\' is not nil!")
 				--minetest.debug("pt.type: " .. pt.type)
 				--minetest.debug("pt.intersection_normal: " .. minetest.pos_to_string(pt.intersection_normal))
 				--minetest.debug("pt.type: " .. pt.type)
