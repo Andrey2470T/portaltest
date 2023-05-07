@@ -7,7 +7,7 @@ dofile(modpath .. "/aerial_faith_plate.lua")
 dofile(modpath .. "/config.lua")
 dofile(modpath .. "/gun.lua")
 dofile(modpath .. "/panels.lua")
-dofile(modpath .. "/portal.lua")
+--dofile(modpath .. "/portal.lua")
 
 -- Global callbacks
 
@@ -62,58 +62,6 @@ minetest.register_globalstep(function(dtime)
 			end
 		end
 
-		local name = player:get_player_name()
-        if player:get_wielded_item():get_name() == "portaltest:gun_item" then
-			local gun_pos, gun_rot = gun.calculate_gun_pos_and_rot(player)
-			if not gun.spawned_guns[name] then
-				minetest.debug("add gun entity")
-				gun.spawned_guns[name] = minetest.add_entity(gun_pos, "portaltest:gun")
-				player_api.set_model(player, "portaltest_player_with_gun.b3d")
-			else
-				gun.spawned_guns[name]:set_pos(gun_pos)
-			end
-
-			gun.spawned_guns[name]:set_rotation(gun_rot)
-
-
-			local ctrls = player:get_player_control()
-
-			local anim
-			local speed = 30
-			local meta = player:get_meta()
-			if ctrls.up or ctrls.right then
-				anim = "walk_forward"
-			elseif ctrls.down or ctrls.left then
-				anim = "walk_backward"
-			elseif ctrls.LMB or ctrls.RMB then
-				if meta:get_string("is_shooting") == "" then
-					minetest.debug("\'is_shooting\' is empty!")
-					anim = "shoot"
-					speed = 10
-
-					local gun_color = ctrls.LMB and "blue" or "orange"
-					meta:set_string("is_shooting", "1")
-					minetest.debug("\'is_shooting\' is 1!")
-
-					gun.spawned_guns[name]:set_properties({textures={"portaltest_gun.png", "portaltest_gun_" .. gun_color .. "_tube.png"}})
-
-					gun.shoot(player, gun.spawned_guns[name], gun_color)
-					gun.knockback_gun(player, gun.spawned_guns[name])
-				end
-
-
-			elseif meta:get_string("is_shooting") == "" then
-				anim = "stand"
-			end
-
-			player_api.set_animation(player, anim, speed)
-		else
-			if gun.spawned_guns[name] then
-				minetest.debug("remove gun entity")
-				gun.spawned_guns[name]:remove()
-				gun.spawned_guns[name] = nil
-				player_api.set_model(player, "character.b3d")
-			end
-		end
+		gun.global_step_through_player_with_gun(player)
 	end
 end)

@@ -6,30 +6,40 @@ gun = {}
 gun.spawned_guns = {}
 
 gun.generate_splash_particles = function(pos, normal, splash_color)
-    local rand_amount = math.random(20, 25)
+	minetest.debug("normal: " .. dump(normal))
+	normal = vector.normalize(normal)
 
-	local min_vel_dir = vector.rotate(normal, {x=-math.pi/4, y=-math.pi/4, z=0})
-	local max_vel_dir = vector.rotate(normal, {x=math.pi/4, y=math.pi/4, z=0})
+	local minvel_rot
+	local maxvel_rot
 
-	minetest.add_particlespawner({
-		amount = rand_amount,
+	if vector.dot(normal, vector.new(0, 1, 0)) == 0 then
+		minvel_rot = vector.new(math.pi/8, -math.pi/8, 0)
+		maxvel_rot = vector.new(-math.pi/8, math.pi/8, 0)
+	else
+		minvel_rot = vector.new(math.pi/8, 0, -math.pi/8)
+		maxvel_rot = vector.new(-math.pi/8, 0, math.pi/8)
+	end
+	local splash_particles_def = {
+		amount = math.random(20, 25),
 		time = 0.1,
 		minpos = pos,
 		maxpos = pos,
-		minvel = vector.multiply(min_vel_dir, 5),
-		maxvel = vector.multiply(max_vel_dir, 5),
+		minvel = vector.rotate(normal, minvel_rot) * 5,
+		maxvel = vector.rotate(normal, maxvel_rot) * 5,
 		minacc = {x=0, y=-gsettings.SPLASH_DROP_GRAVITY, z=0},
 		maxacc = {x=0, y=-gsettings.SPLASH_DROP_GRAVITY, z=0},
 		minexptime = 1.5,
 		maxexptime = 2.5,
 		minsize = 3,
 		maxsize = 3.5,
-		collisiondetection = false,
+		collisiondetection = true,
 		collision_removal = false,
 		object_collision = false,
 		texture = "portaltest_splash_drop.png^[multiply:" .. splash_color,
 		glow = 14
-	})
+	}
+
+	minetest.add_particlespawner(splash_particles_def)
 end
 
 -- Shifts the gun entity backward and turns right a bit for a visual effect while shooting. Also knockback a bit the player`s camera.
@@ -41,27 +51,28 @@ gun.knockback_gun = function(player, gun)
 	local dtime = 0.1
 
 	local orig_cam_dir = player:get_look_dir()
-	local shift_count = 0
+	local orig_pitch = player:get_look_vertical()
 
 	local function knockback(gun)
-		elapsed = elapsed + dtime
+		elapsed = math.floor((elapsed + dtime)*10)/10
 
 		if not gun:get_luaentity() then
 			return
 		end
 
-		if math.floor(elapsed*10)/10 == 0.4 then
+		if elapsed == 0.4 then
 			shift_back = -shift_back
 			cam_rot_d = -cam_rot_d
-			shift_count = 1
-		else
-			shift_count = shift_count + 1
 		end
 
-		player:set_look_vertical(player:get_look_vertical()+cam_rot_d)
+		if elapsed == 0.6 then
+			player:set_look_vertical(orig_pitch)
+		else
+			player:set_look_vertical(player:get_look_vertical()+cam_rot_d)
+		end
 
 		local p, b, pos, rot, fv = gun:get_attach()
-		pos.z = pos.z + shift_back * shift_count
+		pos.z = pos.z + shift_back
 		gun:set_attach(p, b, pos, rot, fv)
 
 		if elapsed < 0.6 then
@@ -99,18 +110,30 @@ gun.shoot = function(player, gun, ball_color)
 
 	local ball_pos = vector.add(gun:get_pos(), vector.rotate(gsettings.GUN_POSITION_SHIFT, {x=-player:get_look_vertical(), y=player:get_look_horizontal(), z=0}))
 	local gun_ball = minetest.add_entity(vector.add(ball_pos, vector.multiply(dir, -0.3)), "portaltest:gun_ball")
+	local self = gun_ball:get_luaentity()
+	self.move_dir = dir
+	self.stream_emitter = player:get_player_name()
 	gun_ball:set_properties({textures={"portaltest_gun_ball.png^[multiply:" .. ball_color}})
 	gun_ball:set_velocity(vector.multiply(dir, gsettings.GUN_BALL_SPEED))
 
 	return true
 end
 
-gun.global_step_through_players_with_guns = function()
-    local players = minetest.get_connected_players()
-
-    for _, player in ipairs(players) do
+gun.global_step_through_player_with_gun = function(player)
 		local name = player:get_player_name()
+		local meta = player:get_meta()
         if player:get_wielded_item():get_name() == "portaltest:gun_item" then
+			if meta:get_string("gun_crosshair_id") == "" then
+				local id = player:hud_add({
+					hud_elem_type = "image",
+					position = {x=0.5, y=0.5},
+					scale = {x=2, y=2},
+					text = "portaltest_gun_crosshair.png",
+					alignment = {x=0, y=0},
+					offset = {x=0, y=0}
+				})
+				meta:set_string("gun_crosshair_id", tostring(id))
+			end
 			if not gun.spawned_guns[name] then
 				gun.spawned_guns[name] = minetest.add_entity(player:get_pos(), "portaltest:gun")
 				gun.spawned_guns[name]:set_attach(player, "", vector.multiply(gsettings.GUN_POSITION_SHIFT, 10), {x=0, y=0, z=0}, true)
@@ -129,7 +152,7 @@ gun.global_step_through_players_with_guns = function()
 			elseif ctrls.LMB or ctrls.RMB then
 				if meta:get_string("is_shooting") == "" then
 					anim = "shoot"
-					speed = 10
+					speed = 1
 
 					local gun_color = ctrls.LMB and "blue" or "orange"
 					meta:set_string("is_shooting", "1")
@@ -151,34 +174,21 @@ gun.global_step_through_players_with_guns = function()
 				gun.spawned_guns[name]:remove()
 				gun.spawned_guns[name] = nil
 				player_api.set_model(player, "character.b3d")
+
+				player:hud_remove(tonumber(meta:get_string("gun_crosshair_id")))
+				meta:set_string("gun_crosshair_id", "")
 			end
 		end
-    end
 end
 
-gun.get_pointedthing_info = function(pos, dir, ray_length)
-	local pos2 = vector.add(pos, vector.multiply(dir, ray_length))
+gun.get_pointedthing_info = function(pos, dir)
+	local pos2 = vector.add(pos, dir)
 	local raycast = minetest.raycast(pos, pos2)
 
 	local target_pt
 	for pt in raycast do
-		--[[if pt.type == "object" then
-			local self = pt.ref:get_luaentity()
-			if self then
-				minetest.debug("ray has intersected an object with name: " .. self.name)
-				if self.name ~= "portaltest:splash_stream" then
-					target_pt = pt
-					break
-				else
-					--minetest.debug("raycast: " .. self.name)
-				end
-			end
-		else]]
 		if pt.type == "node" then
-			--minetest.debug("raycast has intersected a node with name: " .. minetest.get_node(pt.under).name)
 			return pt
-			--target_pt = pt
-			--break
 		end
 	end
 
@@ -207,19 +217,21 @@ end
 
 gun.place_portal = function(placer, pt, color, param2, dir_to_top)
 	local meta = placer:get_meta()
-	gun.update_player_portals_datas(meta)
-	local player_portals = minetest.deserialize(meta:get_string("portals"))
+	--gun.update_player_portals_datas(meta)
+	local player_portals = minetest.deserialize(meta:get_string("portals")) or {}
 
-	if not player_portals or player_portals == {} then
+	--[[if not player_portals or player_portals == {} then
 		player_portals = {}
-	end
+	end]]
 
-	if portal.is_pos_busy_by_portal(pt.above) then
+	--[[if portal.is_pos_busy_by_portal(pt.above) then
 		return
-	end
+	end]]
 
 	if player_portals[color] then
-		minetest.remove_node(player_portals[color])
+		if minetest.get_node(player_portals[color]).name == "portaltest:portal_" .. color then
+			minetest.remove_node(player_portals[color])
+		end
 	end
 
 	player_portals[color] = pt.above
@@ -365,63 +377,58 @@ minetest.register_entity("portaltest:gun_ball", {
     backface_culling = false,
     glow = 25,
     on_activate = function(self, staticdata, dtime_s)
-		self.move_dir = vector.normalize(self.object:get_velocity())
+		if staticdata ~= "" then
+			local data = minetest.deserialize(staticdata)
+			self.move_dir = data[1]
+			self.stream_emitter = data[2]
+		end
     end,
     on_step = function(self, dtime, moveresult)
-        if not moveresult.collides then
-			self.move_dir = vector.normalize(self.object:get_velocity())
-		else
+		if not self.move_dir then return end
+
+		if moveresult.collides then
 			local pos = self.object:get_pos()
-			local vel = self.object:get_velocity()
-			--minetest.debug("cur_vel: " .. vector.length(vel))
 			local texture = self.object:get_properties().textures[1]
 
 			self.object:remove()
-			--minetest.debug("self.last_velocity: " .. minetest.pos_to_string(self.last_velocity))
-			--minetest.debug("current velocity: " .. minetest.pos_to_string(vel))
 
-			local pt = gun.get_pointedthing_info(pos, self.move_dir, 1)
-			--[[if vector.length(self.move_dir) == 0 then
-				pt = gun.get_pointedthing_info(pos, vector.normalize(vel), 1)
-			else
-				pt = gun.get_pointedthing_info(pos, self.move_dir, 1)
-			end]]
+			local pt = gun.get_pointedthing_info(pos, self.move_dir)
+			minetest.debug("pt:" .. dump(pt))
 
 			if pt then
-				--minetest.debug("\'pt\' is not nil!")
-				--minetest.debug("pt.type: " .. pt.type)
-				--minetest.debug("pt.intersection_normal: " .. minetest.pos_to_string(pt.intersection_normal))
-				--minetest.debug("pt.type: " .. pt.type)
 				local s, e = texture:find("%^%[multiply:", 1)
 				local color = texture:sub(e+1, texture:len())
-				--local player = minetest.get_player_by_name(self.stream_emitter)
-				--[[if pt.type == "node" then
+				local player = minetest.get_player_by_name(self.stream_emitter)
+				if player then
 					if pt.intersection_normal.y == 0 then
 						-- Portal is placed on the wall
-						local node = minetest.get_node_or_nil(pt.under)
-						local node2 = minetest.get_node_or_nil(vector.new(pt.under.x, pt.under.y+1, pt.under.z))
+						local undernode = minetest.get_node_or_nil(pt.under)
+						local undernode2 = minetest.get_node_or_nil(vector.new(pt.under.x, pt.under.y+1, pt.under.z))
+						local abovenode = minetest.get_node_or_nil(pt.above)
+						local abovenode2 = minetest.get_node_or_nil(vector.new(pt.above.x, pt.above.y+1, pt.above.z))
 
-						if (node and node.name == "portaltest:panel_mono") and
-							(node2 and node2.name == "portaltest:panel_mono") and
-							minetest.get_node({x=pt.above.x, y=pt.above.y+1, z=pt.above.z}).name == "air" then
+						if (undernode and undernode.name == "portaltest:panel_mono") and
+							(undernode2 and undernode2.name == "portaltest:panel_mono") and
+							(abovenode and abovenode.name == "air") and (abovenode2 and abovenode2.name == "air") then
 
 							gun.place_portal(player, pt, color, minetest.dir_to_facedir(pt.intersection_normal), {x=0, y=1, z=0})
 						end
 					else
 						-- Portal is placed on the floor/ceiling
-						local look_dir = player:get_look_dir()
-						local horiz_look_dir = vector.new(look_dir.x, 0, look_dir.z)
-						local x_horiz_dir = vector.new(look_dir.x, 0, 0)
-						local z_horiz_dir = vector.new(0, 0, look_dir.z)
-						local target_horiz_dir = vector.angle(x_horiz_dir, horiz_look_dir) < vector.angle(horiz_look_dir, z_horiz_dir) and x_horiz_dir or z_horiz_dir
+						local md = self.move_dir
+						local horiz_look_dir = vector.new(md.x, 0, md.z)
+						local x_horiz_dir = vector.new(md.x, 0, 0)
+						local z_horiz_dir = vector.new(0, 0, md.z)
+						local target_horiz_dir = vector.angle(x_horiz_dir, horiz_look_dir) < vector.angle(horiz_look_dir, z_horiz_dir) and -x_horiz_dir or -z_horiz_dir
 
 						local node = minetest.get_node_or_nil(pt.under)
 						local node2 = minetest.get_node_or_nil(vector.add(pt.under, target_horiz_dir))
-						local node3 = minetest.get_node_or_nil(vector.add(pt.under, vector.add(pt.intersection_normal, target_horiz_dir)))
+						local node3 = minetest.get_node_or_nil(pt.above)
+						local node4 = minetest.get_node_or_nil(vector.add(pt.above, target_horiz_dir))
 
 						if (node and node.name == "portaltest:panel_mono") and
 							(node2 and node2.name == "portaltest:panel_mono") and
-							(node3 and node3.name == "air") then
+							(node3 and node3.name == "air") and (node4 and node4.name == "air") then
 
 							-- Keys are param2 values, values are corresponding directions
 							local y_up_rots = {
@@ -455,7 +462,7 @@ minetest.register_entity("portaltest:gun_ball", {
 							gun.place_portal(player, pt, color, target_param2, dir_to_top)
 						end
 					end
-				end]]
+				end
 
 				gun.generate_splash_particles(pt.intersection_point, pt.intersection_normal, color)
 
@@ -482,6 +489,9 @@ minetest.register_entity("portaltest:gun_ball", {
 
             self.object:remove()]]
         end
+    end,
+    get_staticdata = function(self)
+		return minetest.serialize({self.move_dir, self.stream_emitter})
     end
 })
 
@@ -524,13 +534,129 @@ minetest.register_entity("portaltest:gun_ball", {
 		end
     end
 })]]
+local function portal_halo_spawner(pos, color)
+	local nodedir = minetest.facedir_to_dir(minetest.get_node(pos).param2)
+	local radius = 1.5
+	local spawnpos = vector.add(pos, vector.new(0, radius, 0))
+	local vel = vector.rotate_around_axis(nodedir, vector.new(0, 1, 0), math.pi/2)
+	local acc = vector.new(0, -1, 0) * 1/radius
+	local id = minetest.add_particlespawner({
+		amount = 1,
+		time = 0,
+		minpos = spawnpos,
+		maxpos = spawnpos,
+		minvel = vel,
+		maxvel = vel,
+		minacc = acc,
+		maxacc = acc,
+		minexptime = 4,
+		maxexptime = 7,
+		minsize = 4.5,
+		maxsize = 6,
+		collisiondetection = false,
+		collision_removal = false,
+		object_collision = false,
+		texture = "portaltest_" .. color .. "_halo.png",
+		glow = 14
+	})
 
-minetest.register_on_shutdown(function()
-	for i, player in ipairs(minetest.get_connected_players()) do
-		player:get_meta():set_string("is_shooting", "")
+	minetest.get_meta(pos):set_string("halo_spawner_id", tostring(id))
+end
+
+minetest.register_node("portaltest:portal_orange", {
+	description = "Portal",
+	drawtype = "mesh",
+	mesh = "portaltest_portal.b3d",
+	tiles = {"portaltest_orange_portal.png"},
+	paramtype = "light",
+    paramtype2 = "facedir",
+    sunlight_propagates = true,
+	groups = {not_in_creative_inventory=1},
+	light_source = 14,
+	collision_box = {
+		type = "fixed",
+		fixed = {
+			{-0.5, -0.5, -0.5, 0.5, -0.4, -0.4},   	-- Bottom Box
+			{-0.5, -0.4, -0.5, -0.4, 1.4, -0.4},	-- Left Box
+			{0.4, -0.4, -0.5, 0.5, 1.4, -0.4},		-- Right Box
+			{-0.5, 1.4, -0.5, 0.5, 1.5, -0.4}		-- Top Box
+		}
+	},
+	selection_box = {
+		type = "fixed",
+		fixed = {0, 0, 0, 0, 0, 0}
+	},
+	on_construct = function(pos)
+		portal_halo_spawner(pos, "orange")
+		--[[local timer = minetest.get_node_timer(pos)
+		timer:start(0.1)]]
+	end,
+	on_destruct = function(pos)
+		local id = tonumber(minetest.get_meta(pos):get_string("halo_spawner_id"))
+		minetest.delete_particlespawner(id)
+		--portal.remove(pos)
+	end,
+	--[[on_timer = function(pos, elapsed)
+		portal.teleport_entity(pos)
+		portal.check_for_portal_footing(pos)
+		return true
+	end]]
+})
+
+minetest.register_node("portaltest:portal_blue", {
+	description = "Portal",
+	drawtype = "mesh",
+	mesh = "portaltest_portal.b3d",
+	tiles = {"portaltest_blue_portal.png"},
+	paramtype = "light",
+    paramtype2 = "facedir",
+    sunlight_propagates = true,
+	groups = {not_in_creative_inventory=1},
+	light_source = 14,
+	collision_box = {
+		type = "fixed",
+		fixed = {
+			{-0.5, -0.5, -0.5, 0.5, -0.4, -0.4},   	-- Bottom Box
+			{-0.5, -0.4, -0.5, -0.4, 1.4, -0.4},	-- Left Box
+			{0.4, -0.4, -0.5, 0.5, 1.4, -0.4},		-- Right Box
+			{-0.5, 1.4, -0.5, 0.5, 1.5, -0.4}		-- Top Box
+		}
+	},
+	selection_box = {
+		type = "fixed",
+		fixed = {0, 0, 0, 0, 0, 0}
+	},
+	on_construct = function(pos)
+		portal_halo_spawner(pos, "blue")
+		--[[local timer = minetest.get_node_timer(pos)
+		timer:start(0.1)]]
+	end,
+	on_destruct = function(pos)
+		local id = tonumber(minetest.get_meta(pos):get_string("halo_spawner_id"))
+		minetest.delete_particlespawner(id)
+		--portal.remove(pos)
+	end,
+	--[[on_timer = function(pos, elapsed)
+		portal.teleport_entity(pos)
+		portal.check_for_portal_footing(pos)
+		return true
+	end]]
+})
+
+minetest.register_on_leaveplayer(function(player)
+	local meta = player:get_meta()
+	meta:set_string("gun_crosshair_id", "")
+	meta:set_string("is_shooting", "")
+
+	local portals = minetest.deserialize(meta:get_string("portals"))
+
+	if portals then
+		if portals["orange"] and minetest.get_node(portals["orange"]).name == "portaltest:portal_orange" then
+			minetest.remove_node(portals["orange"])
+		end
+		if portals["blue"] and minetest.get_node(portals["blue"]).name == "portaltest:portal_blue" then
+			minetest.remove_node(portals["blue"])
+		end
+		meta:set_string("portals", "")
 	end
-end)
-
-minetest.register_globalstep(function(dtime)
-    gun.global_step_through_players_with_guns()
 end)
