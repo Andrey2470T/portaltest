@@ -5,6 +5,7 @@ local DEFAULT_GRAVITY = -9.8
 -- Load separate files
 dofile(modpath .. "/aerial_faith_plate.lua")
 dofile(modpath .. "/config.lua")
+dofile(modpath .. "/portal.lua")
 dofile(modpath .. "/gun.lua")
 dofile(modpath .. "/panels.lua")
 --dofile(modpath .. "/portal.lua")
@@ -36,6 +37,11 @@ end)
 
 minetest.register_globalstep(function(dtime)
 	for _, player in ipairs(minetest.get_connected_players()) do
+		local cur_vel = player:get_velocity()
+
+		if vector.length(cur_vel) > 0.05 then
+			player:get_meta():set_string("last_vel", vector.to_string(cur_vel))
+		end
 		local pos = player:get_pos()
 		local under_node = minetest.get_node(pos)
 		--minetest.debug("under_node: " .. under_node.name)
