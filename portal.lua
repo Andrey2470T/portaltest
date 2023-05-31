@@ -65,15 +65,19 @@ portal.teleport_entity = function(pos)
 	local surf = {vector.new(-0.5, -0.5, -0.5), vector.new(0.5, 1.5, -0.5)}
 	local rot_surf = table.copy(surf)
 
+	--rot_surf[1] = vector.rotate(rot_surf[1], pdir_rot)
+	--rot_surf[2] = vector.rotate(rot_surf[2], pdir_rot)
+
+	local top_dir = vector.from_string(meta:get_string("dir_to_top"))
+	--top_dir = top_dir.y == 0 and -top_dir or top_dir
+	local tdir_rot = vector.dir_to_rotation(top_dir)
+	pdir_rot.y = pdir_rot.y + tdir_rot.y
+
 	rot_surf[1] = vector.rotate(rot_surf[1], pdir_rot)
 	rot_surf[2] = vector.rotate(rot_surf[2], pdir_rot)
 
-	local top_dir = vector.from_string(meta:get_string("dir_to_top"))
-	top_dir = top_dir.y == 0 and -top_dir or top_dir
-	local tdir_rot_y = vector.dir_to_rotation(top_dir).y
-
-	rot_surf[1] = vector.rotate_around_axis(rot_surf[1], vector.new(0, 1, 0), tdir_rot_y)
-	rot_surf[2] = vector.rotate_around_axis(rot_surf[2], vector.new(0, 1, 0), tdir_rot_y)
+	--rot_surf[1] = vector.rotate_around_axis(rot_surf[1], vector.new(0, 1, 0), tdir_rot_y)
+	--rot_surf[2] = vector.rotate_around_axis(rot_surf[2], vector.new(0, 1, 0), tdir_rot_y)
 
 	-- Catch_box coordinates are relative to the node`s origin (pos)
 	local catch_box = table.copy(rot_surf)
@@ -88,6 +92,10 @@ portal.teleport_entity = function(pos)
 
 		local rots_diff = pdir2_rot - pdir_rot
 		local new_v = vector.rotate(v_to_obj, rots_diff)
+
+		--local top_dir2 = vector.from_string(minetest.get_meta(connected_to):get_string("dir_to_top"))
+		--local tdir2_rot = vector.dir_to_rotation(top_dir2)
+		--pdir2_rot.y = pdir2_rot.y + tdir2_rot.y
 
 		local rot_surf2 = table.copy(surf)
 		rot_surf2[1] = vector.rotate(rot_surf2[1], pdir2_rot)
@@ -288,11 +296,13 @@ local function spawn_portal_halo(pos, color)
 	}
 
 	local rot = vector.dir_to_rotation(dir)
+	local rot2 = vector.dir_to_rotation(up)
+
 	local centre = pos + up*0.5
 	for i, ang in ipairs(angles) do
 		local rpos = vector.rotate_around_axis(up, dir, ang)
 		local particle = minetest.add_entity(centre + rpos*0.75 + dir*0.4, "portaltest:halo_particle", minetest.serialize({ppos=pos, orig_ang=ang, up=up, dir=dir, color=color}))
-		particle:set_rotation(rot)
+		particle:set_rotation(vector.new(rot.x, rot.y+rot2.y, 0))
 	end
 end
 
